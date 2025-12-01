@@ -1,127 +1,153 @@
 # Presentasi: Distributed File System (DFS)
 
-**Judul:** Distributed File System (DFS)
-**Versi:** 1.2
+**Versi:** 1.2 — Presentasi
 **Tanggal:** 1 Desember 2025
 
 ---
 
 ## Slide 1 — Ringkasan Singkat
 
-- Sistem penyimpanan file terdistribusi (DFS).
-- Fitur utama: replikasi otomatis, toleransi kegagalan, checksum (SHA256) untuk integritas.
-- Komponen utama: Naming Service (koordinator), Storage Nodes, CLI Client, Replication Manager.
+- Apa itu: DFS adalah sistem penyimpanan file terdistribusi yang menyediakan replikasi, integritas, dan pemulihan otomatis.
+- Tujuan: menyimpan file secara redundan di beberapa node sehingga layanan tetap tersedia ketika sebagian node turun.
+- Kunci: Metadata (naming service), data (storage nodes), dan client orchestration.
 
 ---
 
-## Slide 2 — Tujuan & Use-cases
+## Slide 2 — Komponen & Peran (Ringkas)
 
-- Menyediakan penyimpanan terdistribusi untuk file besar dan kecil.
-- Use-cases: backup terdistribusi, penyimpanan asset aplikasi, sistem eksperimen/learning.
-- Keunggulan: mudah dijalankan di laptop/devbox, replikasi otomatis, recovery terprogram.
+- Naming Service: koordinator yang menyimpan metadata file, memilih node untuk upload, memantau kesehatan node, dan mengatur replikasi.
+- Storage Node: menyimpan file fisik, menyajikan endpoint upload/download, mengirim heartbeat ke naming service.
+- DFS Client: antarmuka pengguna (CLI) untuk upload/download/list/delete file.
+- Replication Manager & Advanced Recovery: logic background untuk menjaga faktor replikasi dan memperbaiki kehilangan replica.
 
----
-
-## Slide 3 — Komponen Utama
-
-- Naming Service (`naming_service.py`) — metadata, scheduling replikasi, health monitor (port 5000).
-- Storage Node (`storage_node.py`) — menyimpan file, melayani upload/download, heartbeat (port 5001-5003).
-- DFS Client (`dfs_client.py`) — upload/download/list/delete CLI.
-- Replication Manager (`replication_manager.py`) — re-replication saat node turun.
-- Advanced Recovery (`advanced_recovery.py`) — heuristik recovery untuk kasus kompleks.
+Penjelasan singkat tiap peran diberikan untuk audiens teknis agar paham tanggung jawab tiap service.
 
 ---
 
-## Slide 4 — Alur Upload / Download (ringkas)
+## Slide 3 — Arsitektur & Alur Upload/Download
 
-1. Client -> POST `/api/upload/request` ke Naming Service.
-2. Naming Service buat `file_id` dan kembalikan `upload_nodes`.
-3. Client POST multipart ke `POST /upload/{file_id}` pada Storage Node.
-4. Storage Node hitung checksum, simpan, lalu konfirmasi ke Naming Service.
-5. Untuk download: Client minta `GET /api/download/{file_id}` → pilih replica → `GET /download/{file_id}`.
+1) Upload — langkah per langkah (penjelasan naratif):
+	- Client meminta upload ke Naming Service (mengirim filename, size, replication_factor).
+	- Naming Service mengalokasikan `file_id` dan memilih node-node target berdasarkan kesehatan dan ruang.
+	- Client mengunggah berkas langsung ke salah satu Storage Node yang ditunjuk.
+	- Storage Node menyimpan berkas, menghitung checksum SHA256, lalu mengonfirmasi ke Naming Service.
+	- Naming Service mencatat replica baru di metadata.
 
----
+2) Download — langkah per langkah:
+	- Client meminta metadata & daftar replica dari Naming Service.
+	- Client memilih salah satu replica sehat dan mengunduh file langsung dari Storage Node.
 
-## Slide 5 — Skema Metadata (inti)
-
-- Tabel `nodes`: node_id, addr, port, status, last_heartbeat, available_space.
-- Tabel `files`: file_id, filename, size, checksum, created_at.
-- Tabel `replicas`: file_id, node_id, path, created_at.
-- Checksum: SHA256 pada file.
+Gunakan diagram sederhana di slide untuk memperjelas alur (Client → Naming → Storage Nodes).
 
 ---
 
-## Slide 6 — Replikasi & Recovery
+## Slide 4 — Skema Metadata & Integritas
 
-- Default replication factor: 2 (configurable).
-- Heartbeat memantau node; jika offline → trigger re-replication.
-- Recovery flow: pilih source replica → transfer ke target → update metadata.
-- Advanced recovery: checksum validation, quorum, progressive re-replication.
+- Database: SQLite (`dfs.db`) pada pengaturan development menyimpan tabel inti: `nodes`, `files`, `replicas`, `upload_history`.
+- Checksum: setiap file diberi SHA256 untuk menjaga integritas; checksum disimpan di metadata `files`.
+- Penjelasan setiap tabel (1–2 kalimat) ditujukan agar audiens tahu di mana info file & replica disimpan.
 
 ---
 
-## Slide 7 — Cara Menjalankan (singkat)
+## Slide 5 — API Utama (Naming Service)
+
+- `POST /api/upload/request`: minta `file_id` & upload targets — jelaskan request body dan response singkat.
+- `GET /api/download/{file_id}`: dapatkan metadata & daftar replica.
+- `POST /api/node/register` & `POST /api/node/heartbeat`: bagaimana node mendaftar & melaporkan status.
+
+Catat: beri contoh payload singkat pada slide (1–2 contoh JSON) untuk audience developer.
+
+---
+
+## Slide 6 — API Node (Storage Node)
+
+- `POST /upload/{file_id}`: menerima multipart upload; behavior: simpan file ke `<storage-dir>/<file_id>` dan buat meta JSON.
+- `GET /download/{file_id}`: mengirim file sebagai attachment.
+- `GET /health`: endpoint health untuk pemantauan.
+
+Tekankan: komunikasi upload/download terjadi langsung antara client dan storage node; naming service hanya mengatur metadata & koordinasi.
+
+---
+
+## Slide 7 — Replikasi & Recovery (Ringkas)
+
+- Default replication factor: 2 (konfigurasi dapat diubah).
+- Deteksi kegagalan: heartbeat; jika node hilang → tanda `offline` di metadata.
+- Re-replication: replication manager memilih sumber dan target, menyalin file, lalu memperbarui metadata.
+
+Tambahkan contoh alur recovery singkat yang menampilkan trigger → copy → confirm → update metadata.
+
+---
+
+## Slide 8 — Storage Layout & Praktik Penulisan
+
+- Struktur penyimpanan: `<storage-dir>/<file_id>` (binary) dan `<file_id>.meta.json` (small JSON dengan filename/checksum/timestamp).
+- Jelaskan alasan menyimpan `.meta.json` lokal: cepat verifikasi, mempermudah operasi delete/cleanup lokal.
+
+---
+
+## Slide 9 — Menjalankan Sistem (Demo Steps)
+
+Ringkasan langkah yang bisa ditampilkan ke audience saat demo singkat:
 
 ```powershell
-# buat virtualenv & install deps
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-
-# inisialisasi DB (jika perlu)
 python database_schema.py
-
-# buat storage dirs
 mkdir .\storage\node1; mkdir .\storage\node2; mkdir .\storage\node3
-
-# start naming service
 python naming_service.py
-
-# start storage nodes (3 terminal terpisah)
 python storage_node.py --port 5001 --storage-dir .\storage\node1
 python storage_node.py --port 5002 --storage-dir .\storage\node2
 python storage_node.py --port 5003 --storage-dir .\storage\node3
 ```
 
+Berikan catatan singkat: jalankan nodes di terminal terpisah dan tunjukkan health endpoints.
+
 ---
 
-## Slide 8 — Contoh Demo Cepat
+## Slide 10 — Pengujian & Skrip
 
-1. Upload file via client:
+- Unit tests: `pytest` pada file `test_dfs.py`, `test_recovery.py`, `test_advanced_recovery.py`.
+- Demo failure test: upload file, hentikan satu node, tunjukkan re-replication, dan verifikasi metadata.
+
+Tambahkan rekomendasi: otomatisasi test e2e menggunakan skrip PowerShell/Makefile.
+
+---
+
+## Slide 11 — Troubleshooting & Logging
+
+- Hal-hal umum: port collision, permission error, node tidak terdaftar.
+- Perintah cepat untuk cek:
+
 ```powershell
-python dfs_client.py upload path\to\file.txt
+Invoke-RestMethod -Uri 'http://localhost:5000/health'
+Invoke-RestMethod -Uri 'http://localhost:5001/health'
+netstat -ano | Select-String ":5000|:5001|:5002|:5003"
 ```
-2. Catat `file_id` yang dikembalikan.
-3. Download:
+
+Sertakan tips membaca logs stdout dari services untuk menemukan penyebab.
+
+---
+
+## Slide 12 — Perintah Git / Deployment singkat
+
+- Commit & push docs changes:
+
 ```powershell
-python dfs_client.py download <file_id> --output .\downloads
+git add DokumentasiSistem.md presentasi_dfs.md
+git commit -m "Docs: sync presentation with DFS documentation"
+git push origin main
 ```
-4. Periksa checksum & keberadaan replicas pada `dfs.db`.
 
 ---
 
-## Slide 9 — Troubleshooting & Tips
+## Slide 13 — Kesimpulan & Next Steps
 
-- Cek health: `GET http://localhost:5001/health` dan `http://localhost:5000/health`.
-- Jika replikasi tidak berjalan: periksa logs naming service & replication manager.
-- Pastikan `storage/` permission memungkinkan penulisan.
-
----
-
-## Slide 10 — Next Steps & Pengembangan
-
-- Tambah authentication antara Naming Service dan Storage Nodes.
-- Tambah monitoring/metrics (Prometheus + Grafana).
-- Tambah tests e2e dan simulasi chaos (kill node otomatis).
-- Pertimbangkan storage tiering dan erasure coding untuk skala.
+- Sistem sudah memiliki alur dasar upload/download, replikasi, dan recovery.
+- Next steps: tambahkan auth internal, monitoring, dan automation tests.
+- Ajak audiens untuk mencoba demo singkat dan mengajukan pertanyaan teknis.
 
 ---
 
-## Kontak / Referensi
-
-- Repo: https://github.com/SatriaRidhoRamadana/SISTER_DistributionFileSystem
-- File referensi: `DokumentasiSistem.md`, `naming_service.py`, `storage_node.py`, `dfs_client.py`
-
----
-
-*Presentasi ini dibuat dari dokumentasi proyek dan disusun untuk demo/overview teknis.*
+*File ini berisi versi presentasi yang menjelaskan setiap bagian dari `DokumentasiSistem.md` dalam bahasa presentasi — cocok untuk demo teknis.*
