@@ -1,88 +1,5 @@
+
 **DOKUMENTASI SISTEM - DISTRIBUTED FILE SYSTEM (DFS)**
-
-**Versi:** 1.0
-**Tanggal:** 1 Desember 2025
-**Status:** Development / Dokumentasi Terstruktur
-
-## 📋 Daftar Isi
-
-- Ringkasan Sistem
-- Arsitektur Sistem
-- Komponen Utama
-- Persyaratan & Instalasi
-- Cara Menjalankan
-- API Endpoints (ringkasan)
-- Database Schema (ringkasan)
-- Testing
-- Troubleshooting
-- Struktur Project
-
----
-
-## Ringkasan Sistem
-
-Distributed File System (DFS) adalah sistem penyimpanan file terdistribusi yang mendukung replikasi otomatis, toleransi terhadap kegagalan (fault tolerance), dan mekanisme pemulihan otomatis. Implementasi ini menggunakan Python (Flask untuk layanan HTTP) dan SQLite untuk metadata persistensi pada mode development.
-
-Tujuan dokumen ini adalah menyajikan dokumentasi teknis yang terstruktur, mudah dibaca, dan konsisten untuk pengembang dan penguji.
-
----
-
-## Arsitektur Sistem (Singkat)
-
-```
-Client -> Naming Service (Coordinator, :5000)
-                ├─ Storage Node 1 (:5001)
-                ├─ Storage Node 2 (:5002)
-                └─ Storage Node 3 (:5003)
-```
-
-- Naming Service bertindak sebagai koordinator metadata, penugasan upload, dan pemantauan kesehatan node.
-- Storage Node menyimpan data fisik, melayani upload/download, dan mengirim heartbeat ke Naming Service.
-
----
-
-## Komponen Utama
-
-- **Naming Service** (`naming_service.py`): metadata manager, scheduler replikasi, health monitor, dan Web UI (port default: 5000).
-- **Storage Node** (`storage_node.py`): menyimpan file, menyediakan endpoint upload/download, heartbeat ke naming service (port default: 5001-5003).
-- **Client CLI** (`dfs_client.py`): tooling CLI untuk upload, download, list, delete, dan statistik.
-- **Replication Manager** (`replication_manager.py`): background worker yang menangani re-replication saat node gagal.
-- **Advanced Recovery** (`advanced_recovery.py`): strategi recovery prioritas untuk skenario kegagalan kompleks.
-- **Database Schema** (`database_schema.py`): definisi tabel SQLite untuk metadata file, replicas, dan history.
-
----
-
-## Persyaratan & Instalasi
-
-**Software**:
-- Python 3.9+
-- pip
-
-**Dependencies** (development):
-```text
-flask>=2.0.0
-flask-cors>=3.0.10
-requests>=2.28.0
-```
-
-Instalasi cepat:
-```powershell
-pip install -r requirements.txt
-```
-
-Persiapkan folder storage lokal:
-```powershell
-mkdir .\storage\node1
-mkdir .\storage\node2
-mkdir .\storage\node3
-```
-
----
-**DOKUMENTASI SISTEM - DISTRIBUTED FILE SYSTEM (DFS)**
-
-**Versi:** 1.2
-**Tanggal:** 1 Desember 2025
-**Status:** Development — DFS-focused documentation
 
 ## Daftar Isi
 - Ringkasan singkat
@@ -331,26 +248,6 @@ netstat -ano | Select-String ":5000|:5001|:5002|:5003"
 # health check
 Invoke-RestMethod -Uri 'http://localhost:5000/health'
 ```
-
----
-
-## Perintah Git / Deployment singkat
-
-Setelah mengubah dokumentasi, commit & push:
-
-```powershell
-git add DokumentasiSistem.md
-git commit -m "Docs(DFS): rewrite DokumentasiSistem.md — DFS-focused docs"
-git push origin main
-```
-
----
-
-Jika Anda mau, saya bisa juga:
-- Memecah dokumentasi ke `docs/` (contoh `docs/overview.md`, `docs/api.md`),
-- Menambahkan contoh curl requests untuk setiap endpoint, atau
-- Menambahkan checklist deployment ke produksi.
-                                    │
 
 ┌──────────────────────────────────────────────────────┐
 
